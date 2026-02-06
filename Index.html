@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+      body { font-family: 'Inter', sans-serif; background-color: #f4f6f8; display: flex; justify-content: center; padding: 40px; }
+      .container { display: flex; gap: 20px; max-width: 950px; width: 100%; flex-wrap: wrap; align-items: flex-start; }
+      
+      /* Header Styling */
+      .header-container { width: 100%; margin-bottom: 10px; text-align: center; }
+      h1 { color: #1a73e8; font-size: 28px; margin: 0; font-weight: 800; letter-spacing: -0.5px; }
+      p.subtitle { color: #5f6368; margin-top: 5px; font-size: 14px; }
+
+      .card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); flex: 1; min-width: 300px; }
+      h2 { margin-top: 0; color: #202124; font-size: 16px; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; color: #5f6368;}
+      
+      /* Badge for Logged In Users */
+      .user-badge {
+        background-color: #e8f0fe; color: #1a73e8; padding: 10px 15px; border-radius: 8px;
+        font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; border: 1px solid #d2e3fc;
+      }
+      
+      /* Input for Guests */
+      input#username-input {
+        width: 100%; padding: 12px; border: 1px solid #dadce0; border-radius: 8px; font-size: 14px; box-sizing: border-box; transition: 0.2s;
+      }
+      input#username-input:focus { border-color: #1a73e8; outline: none; box-shadow: 0 0 0 2px rgba(26,115,232,0.2); }
+
+      .vibe-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; margin-top: 10px;}
+      .vibe-option {
+        border: 2px solid #e0e0e0; border-radius: 10px; padding: 15px; text-align: center; cursor: pointer; transition: 0.2s;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+      }
+      .vibe-option:hover { background-color: #f8f9fa; border-color: #dadce0; }
+      .vibe-option.selected { border-color: #1a73e8; background-color: #e8f0fe; color: #1a73e8; }
+      .emoji { font-size: 28px; margin-bottom: 4px; }
+      .label { font-size: 14px; font-weight: bold; }
+      
+      button#submit-btn {
+        width: 100%; background-color: #1a73e8; color: white; padding: 14px; border: none; border-radius: 8px;
+        font-weight: 600; cursor: pointer; font-size: 15px; margin-top: 10px; transition: background 0.2s;
+      }
+      button#submit-btn:hover { background-color: #1557b0; }
+      button#submit-btn:disabled { background-color: #e0e0e0; cursor: not-allowed; color: #9aa0a6; }
+      
+      .chart-wrapper { position: relative; height: 320px; width: 100%; }
+    </style>
+  </head>
+  <body>
+
+    <div class="container">
+      
+      <div class="header-container">
+        <h1><?= webinarTitle ?></h1>
+        <p class="subtitle">Share how you're feeling to help us pace the session.</p>
+      </div>
+
+      <div class="card">
+        <h2>Who's checking in?</h2>
+        
+        <? if (userEmail) { ?>
+           <div class="user-badge">
+             <span>🔒</span> Logged in as: <?= userEmail ?>
+           </div>
+        <? } else { ?>
+           <input type="text" id="username-input" placeholder="Your Name or Initials (Optional)">
+        <? } ?>
+        
+        <h2 style="margin-top: 30px;">Current Vibe</h2>
+        <div class="vibe-grid">
+          <div class="vibe-option" onclick="selectVibe(this, 'On Fire')"><span class="emoji">🔥</span><span class="label">On Fire</span></div>
+          <div class="vibe-option" onclick="selectVibe(this, 'Good')"><span class="emoji">😃</span><span class="label">Good</span></div>
+          <div class="vibe-option" onclick="selectVibe(this, 'Okay')"><span class="emoji">😐</span><span class="label">Okay</span></div>
+          <div class="vibe-option" onclick="selectVibe(this, 'Overwhelmed')"><span class="emoji">🤯</span><span class="label">Overwhelmed</span></div>
+        </div>
+        
+        <button id="submit-btn" onclick="sendData()" disabled>Submit Pulse</button>
+        <p id="error-msg" style="color: #d93025; font-size: 13px; margin-top: 10px; display: none;"></p>
+      </div>
+
+      <div class="card">
+        <h2>Team Temperature</h2>
+        <div class="chart-wrapper"><canvas id="vibeChart"></canvas></div>
+      </div>
+      
+    </div>
+
+    <script>
+      let selectedVibe = "";
+      let myChart;
+
+      window.onload = function() { refreshChart(); setInterval(refreshChart, 5000); };
+
+      function selectVibe(element, vibe) {
+        document.querySelectorAll('.vibe-option').forEach(el => el.classList.remove('selected'));
+        element.classList.add('selected');
+        selectedVibe = vibe;
+        document.getElementById('submit-btn').disabled = false;
+      }
+
+      function sendData() {
+        // 1. Get the manual name (if the input box exists)
+        const nameInput = document.getElementById('username-input');
+        const manualName = nameInput ? nameInput.value : "";
+        
+        const btn = document.getElementById('submit-btn');
+        const err = document.getElementById('error-msg');
+        
+        btn.textContent = "Submitting...";
+        btn.disabled = true;
+        err.style.display = 'none';
+
+        google.script.run
+          .withSuccessHandler(function(counts) {
+            btn.textContent = "Submitted!";
+            updateChartObj(counts);
+            setTimeout(() => {
+              btn.textContent = "Submit Pulse";
+              document.querySelectorAll('.vibe-option').forEach(el => el.classList.remove('selected'));
+              document.getElementById('submit-btn').disabled = true;
+            }, 2000);
+          })
+          .withFailureHandler(function(error) {
+            btn.textContent = "Retry";
+            btn.disabled = false;
+            err.innerText = "Error: " + error.message;
+            err.style.display = 'block';
+          })
+          .submitPulse(manualName, selectedVibe); // Sending Name + Vibe
+      }
+
+      function refreshChart() { google.script.run.withSuccessHandler(updateChartObj).getChartData(); }
+
+      function updateChartObj(counts) {
+        const ctx = document.getElementById('vibeChart').getContext('2d');
+        const dataValues = [counts["On Fire"], counts["Good"], counts["Okay"], counts["Overwhelmed"]];
+        
+        if (myChart) {
+          myChart.data.datasets[0].data = dataValues;
+          myChart.update();
+        } else {
+          myChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+              labels: ['On Fire', 'Good', 'Okay', 'Overwhelmed'],
+              datasets: [{ data: dataValues, backgroundColor: ['#FF5722', '#4CAF50', '#FFC107', '#9E9E9E'], borderWidth: 0 }]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+          });
+        }
+      }
+    </script>
+  </body>
+</html>
