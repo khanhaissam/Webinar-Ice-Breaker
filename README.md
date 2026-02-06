@@ -1,4 +1,4 @@
-# Webinar Pulse Checker 🌡️
+# Webinar Ice Breaker 
 
 ![App Preview](screenshot.png)
 
